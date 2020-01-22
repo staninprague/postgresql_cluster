@@ -1,5 +1,4 @@
 ---
-
 - name: Deploy PostgreSQL High-Availability Cluster (based on "Patroni" and "DCS(etcd)")
   hosts: postgres_cluster
   become: true
@@ -7,22 +6,21 @@
   any_errors_fatal: true
   gather_facts: true
   vars_files:
-    - vars/main.yml
+    - ../env/home/vars/main.yml
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
-
 
   pre_tasks:
     - import_tasks: tasks/check_system.yml
 
     - import_tasks: tasks/add-repository.yml
-      tags: [ add_repo ]
+      tags: [add_repo]
 
     - import_tasks: tasks/packages.yml
-      tags: [ install_packages ]
+      tags: [install_packages]
 
     - import_tasks: tasks/sudo.yml
-      tags: [ sudo, postgres_sudo ]
+      tags: [sudo, postgres_sudo]
 
   roles:
     - role: ansible-role-firewall
@@ -36,7 +34,7 @@
 
     - import_tasks: tasks/etcd.yml
       when: dcs_exists == "false" and dcs_type == "etcd"
-      tags: [ etcd, etcd_cluster ]
+      tags: [etcd, etcd_cluster]
 
     - import_tasks: tasks/patroni.yml
       tags: patroni
@@ -51,7 +49,7 @@
 
     - import_tasks: tasks/vip-manager.yml
       when: with_haproxy_load_balancing != "true" and cluster_vip | length > 0
-      tags: [ vip, vip_manager ]
+      tags: [vip, vip_manager]
 
     # optional
     - import_tasks: tasks/postgresql-users.yml
@@ -68,5 +66,4 @@
 
     # finish (info)
     - import_tasks: tasks/deploy_finish.yml
-      tags: [ cluster_info, cluster_status ]
-
+      tags: [cluster_info, cluster_status]
