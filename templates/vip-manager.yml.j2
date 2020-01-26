@@ -13,7 +13,7 @@ mask: 24 # netmask for the virtual ip
 iface: {{ vip_interface }} #interface to which the virtual ip will be added
 
 # how the virtual ip should be managed. we currently support "ip addr add/remove" through shell commands or the Hetzner api
-hosting_type: basic # possible values: basic, hetzner .
+hosting_type: {{ vip_hosting_type }} # possible values: basic, hetzner .
 
 endpoint_type: {{ dcs_type }} # etcd or consul
 # a list that contains all endpoints to which etcd could talk. 
