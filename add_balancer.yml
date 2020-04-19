@@ -1,7 +1,7 @@
 ---
 
-- name: PostgreSQL High-Availability Cluster Scaling (add replica node)
-  hosts: replica
+- name: Add haproxy balancer node
+  hosts: balancers
   become: true
   become_method: sudo
   any_errors_fatal: true
@@ -11,7 +11,7 @@
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
   vars:
-    existing_pgcluster: true
+    add_balancer: true
 
   pre_tasks:
     - import_tasks: tasks/check_system.yml
@@ -57,36 +57,11 @@
   tasks:
     - meta: flush_handlers
 
-    - import_tasks: tasks/add-repository.yml
-      tags: add_repo
+    - import_tasks: tasks/sysctl.yml
+      tags: sysctl, kernel
 
-    - import_tasks: tasks/packages.yml
-      tags: install_packages
-
-    - import_tasks: tasks/sudo.yml
-      tags: sudo, postgres_sudo
-
-    - import_tasks: tasks/configure.yml
-      tags: configure
-
-    - import_tasks: tasks/pgbouncer.yml
-      when: install_pgbouncer == "true"
-      tags: pgbouncer
-
-    - import_tasks: tasks/wal-g.yml
-      when: wal_g_install == "true"
-      tags: wal-g
-
-    - import_tasks: tasks/patroni.yml
-      tags: patroni
-
-    - import_tasks: tasks/vip-manager.yml
-      when: with_haproxy_load_balancing != "true" and
-            (cluster_vip is defined and cluster_vip | length > 0)
-      tags: vip, vip_manager
-
-    # finish (info)
-    - import_tasks: tasks/deploy_finish.yml
-      tags: cluster_info, cluster_status
+    - import_tasks: tasks/haproxy.yml
+      when: with_haproxy_load_balancing == "true"
+      tags: load_balancing
 
 ...

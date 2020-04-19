@@ -15,7 +15,7 @@ restapi:
 
 {% if dcs_exists == 'false' and dcs_type == 'etcd' %}
 etcd:
-  hosts: {% for host in groups['postgres_cluster'] %}{{ hostvars[host]['inventory_hostname'] }}:2379{% if not loop.last %},{% endif %}{% endfor %}
+  hosts: {% for host in groups['etcd_cluster'] %}{{ hostvars[host]['inventory_hostname'] }}:2379{% if not loop.last %},{% endif %}{% endfor %}
 {% endif %}
 {% if dcs_exists == 'true' and dcs_type == 'etcd' %}
 etcd:
@@ -26,28 +26,34 @@ etcd:
 bootstrap:
   # this section will be written into Etcd:/<namespace>/<scope>/config after initializing new cluster
   # and all other cluster members will use it as a `global configuration`
+  method: {{ patroni_cluster_bootstrap_method }}
+{% if patroni_cluster_bootstrap_method == 'wal-g' %}
+  wal-g:
+    command: /etc/patroni/wal_g_bootstrap.sh
+    recovery_conf:
+       recovery_target_action: promote
+       recovery_target_timeline: latest
+       restore_command: wal-g wal-fetch %f %p
+{% endif %}
   dcs:
-    ttl: 30
-    loop_wait: 10
-    retry_timeout: 10
-    maximum_lag_on_failover: 1048576
-    master_start_timeout: 300
+    ttl: {{ patroni_ttl |d(30, true) |int }}
+    loop_wait: {{ patroni_loop_wait |d(10, true) |int }}
+    retry_timeout: {{ patroni_retry_timeout |d(10, true) |int }}
+    maximum_lag_on_failover: {{ patroni_maximum_lag_on_failover |d(1048576, true) |int }}
+    master_start_timeout: {{ patroni_master_start_timeout |d(300, true) |int }}
     synchronous_mode: {{ synchronous_mode |d(false, true) |lower }}
-    synchronous_mode_strict: false
+    synchronous_mode_strict: {{ synchronous_mode_strict |d(false, true) |lower }}
     #standby_cluster:
       #host: 127.0.0.1
       #port: 1111
       #primary_slot_name: patroni 
     postgresql:
-      use_pg_rewind: true
+      use_pg_rewind: {{ patroni_postgresql_use_pg_rewind |d(false, true) |lower }}
       use_slots: true
       parameters:
       {% for parameter in postgresql_parameters %}
         {{ parameter.option }}: {{ parameter.value }}
       {% endfor %}
- 
- #      recovery_conf:
-#        restore_command: cp ../wal_archive/%f %p
  
   # some desired options for 'initdb'
 {% if postgresql_exists == 'true' %}
@@ -81,11 +87,10 @@ bootstrap:
 
   
 postgresql:
-{% if with_haproxy_load_balancing == "true" or install_pgbouncer == "true" %}
-  listen: {{ hostvars[inventory_hostname]['inventory_hostname'] }},127.0.0.1:{{ postgresql_port }}
-{% endif %}
-{% if with_haproxy_load_balancing != "true" and install_pgbouncer != "true" %}
+{% if with_haproxy_load_balancing != "true" and install_pgbouncer != "true" and (cluster_vip is defined and cluster_vip | length > 0) %}
   listen: {{ hostvars[inventory_hostname]['inventory_hostname'] }},{{ cluster_vip }},127.0.0.1:{{ postgresql_port }}
+{% else %}
+  listen: {{ hostvars[inventory_hostname]['inventory_hostname'] }},127.0.0.1:{{ postgresql_port }}
 {% endif %}
   connect_address: {{ hostvars[inventory_hostname]['inventory_hostname'] }}:{{ postgresql_port }}
   use_unix_socket: true
@@ -107,6 +112,9 @@ postgresql:
     unix_socket_directories: {{ postgresql_unix_socket_dir }}
     stats_temp_directory: /var/lib/pgsql_stats_tmp
  
+  remove_data_directory_on_rewind_failure: {{ patroni_remove_data_directory_on_rewind_failure |d(false, true) |lower }}
+  remove_data_directory_on_diverged_timelines: {{ patroni_remove_data_directory_on_diverged_timelines |d(false, true) |lower }}
+
 #  callbacks:
 #    on_start:
 #    on_stop:
@@ -115,21 +123,45 @@ postgresql:
 #    on_role_change:
  
   create_replica_methods:
-#   - pgbackrest
-#   - wal_e
-   - basebackup
-# pgbackrest:
-#   command: /usr/bin/pgbackrest --stanza=<Stanza_Name> --delta restore
-#   keep_data: True
-#   no_params: True
-#  wal_e
-#    command: patroni_wale_restore
-#    no_master: 1
-#    envdir: /etc/wal_e/envdir
-#    use_iam: 1
+{% if patroni_create_replica_methods is defined and patroni_create_replica_methods | length > 0 %}
+  {% for create_replica_method in patroni_create_replica_methods %}
+    - {{ create_replica_method }}
+  {% endfor %}
+  {% if 'pgbackrest' in patroni_create_replica_methods %}
+  pgbackrest:
+    {% for item in pgbackrest %}
+    {{ item.option }}: {{ item.value }}
+    {% endfor %}
+  {% endif %}
+  {% if 'wal_e' in patroni_create_replica_methods %}
+  wal_e:
+    {% for item in wal_e %}
+    {{ item.option }}: {{ item.value }}
+    {% endfor %}
+  {% endif %}
+  {% if 'wal_g' in patroni_create_replica_methods %}
+  wal_g:
+    {% for item in wal_g %}
+    {{ item.option }}: {{ item.value }}
+    {% endfor %}
+  {% endif %}
+  {% if 'basebackup' in patroni_create_replica_methods %}
+  basebackup:
+    {% for item in basebackup %}
+    {{ item.option }}: '{{ item.value }}'
+    {% endfor %}
+  {% endif %}
+{% else %}
+    - basebackup
   basebackup:
     max-rate: '100M'
- 
+{% endif %}
+
+{% if postgresql_restore_command is defined and postgresql_restore_command | length > 0 %}
+  recovery_conf:
+    restore_command: {{ postgresql_restore_command }}
+{% endif %}
+
  #watchdog:
 #  mode: automatic # Allowed values: off, automatic, required
 #  device: /dev/watchdog

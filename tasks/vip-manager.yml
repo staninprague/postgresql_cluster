@@ -1,4 +1,6 @@
 ---
+# yamllint disable rule:line-length
+
 # install vip-manager package from repo
 - block:
     - name: vip-manager | get vip-manager package
@@ -6,14 +8,14 @@
         url: "{{ item }}"
         dest: /tmp/
         timeout: 60
-        validate_certs: no
+        validate_certs: false
       loop:
         - "{{ vip_manager_package_repo }}"
       environment: "{{ proxy_env | default({}) }}"
 
     - name: vip-manager | install package
       apt:
-        force_apt_get: yes
+        force_apt_get: true
         deb: "/tmp/{{ vip_manager_package_repo | basename }}"
         state: present
       when: ansible_os_family == "Debian"
@@ -24,7 +26,7 @@
         state: present
       when: ansible_os_family == "RedHat"
   when: installation_method == "repo" and vip_manager_package_repo | length > 0
-  tags: [vip_manager, vip_manager_install]
+  tags: vip_manager, vip_manager_install
 
 # install vip-manager package from file
 - block:
@@ -35,7 +37,7 @@
 
     - name: vip-manager | install package
       apt:
-        force_apt_get: yes
+        force_apt_get: true
         deb: "/tmp/{{ vip_manager_package_file | basename }}"
         state: present
       when: ansible_os_family == "Debian"
@@ -46,51 +48,49 @@
         state: present
       when: ansible_os_family == "RedHat"
   when: installation_method == "file" and vip_manager_package_file | length > 0
-  tags: [vip_manager, vip_manager_install]
+  tags: vip_manager, vip_manager_install
 
-- name: vip-manager | generate conf file "{{ vip_manager_config }}"
+- name: vip-manager | make sure the conf directory "{{ vip_manager_conf_dir }}" exist
+  file:
+    dest: "{{ vip_manager_conf_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+  tags: vip_manager, vip_manager_conf
+
+- name: vip-manager | generate conf file "{{ vip_manager_conf_dir }}/{{ vip_manager_conf_file }}"
   template:
     src: templates/vip-manager.yml.j2
-    dest: "{{ vip_manager_config }}"
+    dest: "{{ vip_manager_conf_dir }}/{{ vip_manager_conf_file }}"
     owner: postgres
     group: postgres
     mode: 0644
   register: vip_manager_conf_result
   when: existing_pgcluster is not defined or not existing_pgcluster|bool
-  tags: [vip_manager, vip_manager_conf]
-
-- name: vip-manager | generate hetzner robot api configuration file.
-  template:
-    src: templates/vip-manager-hetzner.txt.j2
-    dest: "{{ vip_manager_hetzner_config }}"
-    owner: postgres
-    group: postgres
-    mode: 0644
-  when: vip_hosting_type == "hetzner"
-  tags: [vip_manager, vip_manager_conf]
+  tags: vip_manager, vip_manager_conf
 
 - block: # for add_pgnode.yml
-    - name: vip-manager | fetch vip-manager.yml conf file from master
+    - name: vip-manager | fetch "{{ vip_manager_conf_file }}" conf file from master
       run_once: true
       fetch:
-        src: "{{ vip_manager_config }}"
-        dest: "files/{{ vip_manager_config }}"
-        validate_checksum: yes
-        flat: yes
+        src: "{{ vip_manager_conf_dir }}/{{ vip_manager_conf_file }}"
+        dest: "files/{{ vip_manager_conf_file }}"
+        validate_checksum: true
+        flat: true
       delegate_to: "{{ groups.master[0] }}"
 
-    - name: vip-manager | copy vip-manager.yml conf file to replica
+    - name: vip-manager | copy "{{ vip_manager_conf_file }}" conf file to replica
       copy:
-        src: "files/{{ vip_manager_config }}"
-        dest: "{{ vip_manager_config }}"
+        src: "files/{{ vip_manager_conf_file }}"
+        dest: "{{ vip_manager_conf_dir }}"
       register: vip_manager_conf_result
 
-    - name: vip-manager | prepare vip-manager.yml conf file (replace "nodename","iface")
+    - name: vip-manager | prepare "{{ vip_manager_conf_file }}" conf file (replace "nodename","iface")
       lineinfile:
-        path: "{{ vip_manager_config }}"
+        path: "{{ vip_manager_conf_dir }}/{{ vip_manager_conf_file }}"
         regexp: "{{ item.regexp }}"
         line: "{{ item.line }}"
-        backrefs: yes
+        backrefs: true
       loop:
         - { regexp: "^nodename:", line: 'nodename: "{{ ansible_hostname }}"' }
         - {
@@ -101,7 +101,7 @@
         label: "{{ item.line }}"
       register: vip_manager_conf_prepare_result
   when: existing_pgcluster is defined and existing_pgcluster|bool
-  tags: [vip_manager, vip_manager_conf]
+  tags: vip_manager, vip_manager_conf
 
 - name: vip-manager | generate systemd service file
   template:
@@ -111,17 +111,19 @@
     group: postgres
     mode: 0644
   register: vip_manager_service_result
-  tags: [vip_manager, vip_manager_service]
+  tags: vip_manager, vip_manager_service
 
 - name: vip-manager | restart systemd service
   systemd:
-    daemon_reload: yes
+    daemon_reload: true
     name: vip-manager
     state: restarted
-    enabled: yes
+    enabled: true
   register: vip_manager_restart_result
-  when: vip_manager_conf_result.changed or vip_manager_service_result.changed or vip_manager_conf_prepare_result.changed
-  tags: [vip_manager, vip_manager_restart]
+  when: vip_manager_conf_result.changed or
+    vip_manager_service_result.changed or
+    vip_manager_conf_prepare_result.changed
+  tags: vip_manager, vip_manager_restart
 
 - name: wait for the cluster ip address (VIP) "{{ cluster_vip }}" is running
   wait_for:
@@ -131,4 +133,4 @@
     timeout: 60
     delay: 2
   when: vip_manager_restart_result.changed
-  tags: [vip_manager, vip_manager_restart]
+  tags: vip_manager, vip_manager_restart
