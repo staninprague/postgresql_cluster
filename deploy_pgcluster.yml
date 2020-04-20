@@ -6,7 +6,7 @@
   gather_facts: true
   any_errors_fatal: true
   vars_files:
-    - ../env/hetzner/vars/main.yml
+    - ../env/{{ env }}/vars/main.yml
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
 
@@ -55,7 +55,7 @@
   any_errors_fatal: true
   gather_facts: true
   vars_files:
-    - vars/main.yml
+    - ../env/{{ env }}/vars/main.yml
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
 
@@ -85,7 +85,7 @@
   any_errors_fatal: true
   gather_facts: true
   vars_files:
-    - vars/main.yml
+    - ../env/{{ env }}/vars/main.yml
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
 
@@ -105,7 +105,7 @@
   any_errors_fatal: true
   gather_facts: true
   vars_files:
-    - vars/main.yml
+    - ../env/{{ env }}/vars/main.yml
     - vars/system.yml
     - "vars/{{ ansible_os_family }}.yml"
 
