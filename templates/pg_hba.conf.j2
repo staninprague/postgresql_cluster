@@ -99,6 +99,6 @@
 # Allow replication connections from localhost, by a user with the
 # replication privilege.
   host      replication              {{ patroni_replication_username }}               127.0.0.1/32             md5
-{% for host in groups['app_servers'] %}
-  host      adiona              adionauser               {{ hostvars[host]['inventory_hostname'] }}/32         md5
+{% for client in client_ip_cidrs %}
+  host      all              all               {{ client.address.ljust(25) |default('') }}         md5
 {% endfor %}
